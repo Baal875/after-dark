@@ -51,6 +51,18 @@ def extract_album_links(page_content):
             links.add(href)
     return list(links)
 
+async def fetch_bunkr_gallery_images(username: str) -> list:
+    image_urls = []
+    async with aiohttp.ClientSession() as session:
+        album_links = await get_all_album_links_from_search(username, session)
+        for album in album_links:
+            img_page_links = await get_image_links_from_album(album, session)
+            for link in img_page_links:
+                img_url = await get_image_url_from_linkk(link, session)
+                if img_url:
+                    image_urls.append(img_url)
+    return image_urls
+
 async def fetch_all_album_pages(username, max_pages=10):
     async with aiohttp.ClientSession() as session:
         tasks = []
