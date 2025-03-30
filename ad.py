@@ -285,11 +285,14 @@ async def fetch_fapello_album_media(album_url: str) -> dict:
         return media
 
     async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
+        # Fetch main album page.
         content, base_url, status = await get_webpage_content(album_url, session)
         if status != 200:
             debug_log(f"[DEBUG] Failed to fetch main album page: {album_url} (status {status})")
             return media
+
         soup = BeautifulSoup(content, 'html.parser')
+        # Find album page links on the main page.
         links = []
         for a in soup.find_all('a', href=True):
             href = a['href']
@@ -297,18 +300,58 @@ async def fetch_fapello_album_media(album_url: str) -> dict:
                 links.append(href)
         links = list(set(links))
         debug_log(f"[DEBUG] Found {len(links)} album pages from main page {album_url}")
+
+        # If no additional links were found, use the main page.
         if not links:
             links = [album_url]
+
+        # Fetch media from all album pages concurrently.
         tasks = [fetch_fapello_page_media(link, session, username) for link in links]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for result in results:
             if isinstance(result, dict):
                 media["images"].extend(result.get("images", []))
                 media["videos"].extend(result.get("videos", []))
+        # Remove duplicates.
+        media["images"] = list(set(media["images"]))
+        media["videos"] = list(set(media["videos"]))
+        debug_log(f"[DEBUG] Media collected after album pages for {username}: {len(media['images'])} images, {len(media['videos'])} videos")
+
+        # Handle infinite scroll pagination with visited URLs tracking.
+        visited_urls = set()  # To track URLs we've already fetched
+        current_url = album_url
+        while current_url:
+            if current_url in visited_urls:
+                debug_log(f"[DEBUG] Already visited {current_url}, stopping to avoid duplicate fetching.")
+                break
+            visited_urls.add(current_url)
+            
+            page_content, _, status = await get_webpage_content(current_url, session)
+            if status != 200:
+                break
+
+            page_soup = BeautifulSoup(page_content, 'html.parser')
+            # Assume extract_media_from_page returns a tuple: (list_of_images, list_of_videos)
+            page_images, page_videos = extract_media_from_page(page_soup)
+            debug_log(f"[DEBUG] {current_url}: Found {len(page_images)} images and {len(page_videos)} videos")
+            media["images"].extend(page_images)
+            media["videos"].extend(page_videos)
+            # Look for the next page marker (e.g., a div with id="next_page").
+            next_div = page_soup.find("div", id="next_page")
+            if next_div:
+                next_link = next_div.find("a", href=True)
+                if next_link:
+                    # Build an absolute URL if needed.
+                    current_url = urllib.parse.urljoin(base_url, next_link['href'])
+                    continue
+            break
+
+        # Final deduplication.
         media["images"] = list(set(media["images"]))
         media["videos"] = list(set(media["videos"]))
         debug_log(f"[DEBUG] Total media collected for {username}: {len(media['images'])} images and {len(media['videos'])} videos")
         return media
+
 async def extract_jpg5_album_media_urls(album_url: str) -> list:
     media_urls = set()
     next_page_url = album_url.rstrip('/')
