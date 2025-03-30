@@ -272,6 +272,9 @@ async def fetch_fapello_page_media(page_url: str, session: aiohttp.ClientSession
         debug_log(f"[DEBUG] Exception in fetching {page_url}: {e}")
         return {}
 
+
+
+
 async def fetch_fapello_album_media(album_url: str) -> dict:
     media = {"images": [], "videos": []}
     parsed = urllib.parse.urlparse(album_url)
@@ -281,42 +284,27 @@ async def fetch_fapello_album_media(album_url: str) -> dict:
         debug_log("[DEBUG] Could not extract username from album URL.")
         return media
 
-    visited_urls = set()  # To track URLs we've already fetched
     async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
-        current_url = album_url
-        while current_url:
-            if current_url in visited_urls:
-                debug_log(f"[DEBUG] Already visited {current_url}, stopping to avoid duplicate fetching.")
-                break
-            visited_urls.add(current_url)
-            content, base_url, status = await get_webpage_content(current_url, session)
-            if status != 200:
-                debug_log(f"[DEBUG] Failed to fetch page: {current_url} (status {status})")
-                break
-            soup = BeautifulSoup(content, 'html.parser')
-            # Extract media from current page
-            page_images = [img['src'] for img in soup.find_all('img', src=True)
-                           if img['src'].startswith("https://fapello.com/content/") and f"/{username}/" in img['src']]
-            video_tags = soup.find_all('source', type="video/mp4", src=True)
-            page_videos = [vid['src'] for vid in video_tags
-                           if vid['src'].startswith("https://cdn.fapello.com/content/") and 
-                              (vid['src'].endswith(".mp4") or vid['src'].endswith(".m4v"))]
-            media["images"].extend(page_images)
-            media["videos"].extend(page_videos)
-            debug_log(f"[DEBUG] {current_url}: Found {len(page_images)} images and {len(page_videos)} videos")
-            # Check for next page marker (infinite scroll)
-            next_div = soup.find("div", id="next_page")
-            if next_div:
-                next_link = next_div.find("a", href=True)
-                if next_link:
-                    # If the next page URL is relative, build an absolute URL.
-                    current_url = urllib.parse.urljoin(base_url, next_link['href'])
-                else:
-                    break
-            else:
-                break
-
-        # Remove duplicates from collected media.
+        content, base_url, status = await get_webpage_content(album_url, session)
+        if status != 200:
+            debug_log(f"[DEBUG] Failed to fetch main album page: {album_url} (status {status})")
+            return media
+        soup = BeautifulSoup(content, 'html.parser')
+        links = []
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            if href.startswith(album_url) and re.search(r'/\d+/?$', href):
+                links.append(href)
+        links = list(set(links))
+        debug_log(f"[DEBUG] Found {len(links)} album pages from main page {album_url}")
+        if not links:
+            links = [album_url]
+        tasks = [fetch_fapello_page_media(link, session, username) for link in links]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, dict):
+                media["images"].extend(result.get("images", []))
+                media["videos"].extend(result.get("videos", []))
         media["images"] = list(set(media["images"]))
         media["videos"] = list(set(media["videos"]))
         debug_log(f"[DEBUG] Total media collected for {username}: {len(media['images'])} images and {len(media['videos'])} videos")
