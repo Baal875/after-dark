@@ -51,16 +51,120 @@ def extract_album_links(page_content):
             links.add(href)
     return list(links)
 
+# --- New Functions for Bunkr Image Gallery ---
+
+async def get_album_links_from_search(username: str, session: aiohttp.ClientSession, page: int = 1) -> list:
+    search_url = f"https://bunkr-albums.io/?search={urllib.parse.quote(username)}&page={page}"
+    debug_log(f"[DEBUG] Searching albums for username: '{username}' on page {page} using URL: {search_url}")
+    try:
+        async with session.get(search_url) as response:
+            if response.status != 200:
+                debug_log(f"[DEBUG] Received {response.status} for search query. Skipping page {page}.")
+                return []
+            text = await response.text()
+        soup = BeautifulSoup(text, 'html.parser')
+        album_tags = soup.find_all('a', href=lambda h: h and h.startswith("https://bunkr.cr/a/"))
+        album_links = []
+        for tag in album_tags:
+            album_link = tag.get('href')
+            album_links.append(album_link)
+            debug_log(f"[DEBUG] Found album link: {album_link}")
+        debug_log(f"[DEBUG] Total album links found on page {page}: {len(album_links)}")
+        return album_links
+    except Exception as e:
+        debug_log(f"[DEBUG] Error fetching albums for {username} on page {page}: {e}")
+        return []
+
+async def get_all_album_links_from_search(username: str, session: aiohttp.ClientSession) -> list:
+    all_links = []
+    page = 1
+    while True:
+        links = await get_album_links_from_search(username, session, page)
+        if not links:
+            debug_log(f"[DEBUG] No album links found on page {page}. Ending pagination.")
+            break
+        all_links.extend(links)
+        search_url = f"https://bunkr-albums.io/?search={urllib.parse.quote(username)}&page={page}"
+        async with session.get(search_url) as response:
+            text = await response.text()
+        soup = BeautifulSoup(text, 'html.parser')
+        next_page = soup.find('a', href=re.compile(rf"\?search={re.escape(username)}&page={page+1}"), class_="btn btn-sm btn-main")
+        if not next_page:
+            debug_log(f"[DEBUG] No pagination link found for page {page+1}.")
+            break
+        page += 1
+    unique_links = list(dict.fromkeys(all_links))
+    debug_log(f"[DEBUG] Total album links collected from all pages: {len(unique_links)}")
+    return unique_links
+
+async def get_image_links_from_album(album_url: str, session: aiohttp.ClientSession) -> list:
+    debug_log(f"[DEBUG] Fetching album page: {album_url}")
+    try:
+        async with session.get(album_url) as response:
+            if response.status != 200:
+                debug_log(f"[DEBUG] Received {response.status} for album URL {album_url}. Skipping.")
+                return []
+            text = await response.text()
+        soup = BeautifulSoup(text, 'html.parser')
+        links = []
+        for link in soup.find_all('a', attrs={'aria-label': 'download'}, href=True):
+            href = link.get('href')
+            if href.startswith("/f/"):
+                full_link = "https://bunkr.cr" + href
+                links.append(full_link)
+                debug_log(f"[DEBUG] Found image page link: {full_link}")
+            elif href.startswith("https://bunkr.cr/f/"):
+                links.append(href)
+                debug_log(f"[DEBUG] Found image page link: {href}")
+        debug_log(f"[DEBUG] Total image page links found on album page: {len(links)}")
+        return links
+    except Exception as e:
+        debug_log(f"[DEBUG] Error fetching images from album URL {album_url}: {e}")
+        return []
+
+async def get_image_url_from_linkk(link: str, session: aiohttp.ClientSession) -> str:
+    debug_log(f"[DEBUG] Opening image page link: {link}")
+    try:
+        async with session.get(link) as response:
+            if response.status != 200:
+                debug_log(f"[DEBUG] Received {response.status} for link: {link}. Skipping.")
+                return None
+            text = await response.text()
+    except Exception as e:
+        debug_log(f"[DEBUG] Error fetching image page {link}: {e}")
+        return None
+
+    soup = BeautifulSoup(text, 'html.parser')
+    img_tag = soup.find('img', class_=lambda x: x and "object-cover" in x)
+    if img_tag:
+        image_url = img_tag.get('src')
+        debug_log(f"[DEBUG] Found image URL: {image_url} for page link: {link}")
+        # Use asyncio.gather to perform the HEAD request concurrently if needed.
+        try:
+            head_task = session.head(image_url)
+            head_response = await asyncio.gather(head_task)
+            if head_response[0].status != 200:
+                debug_log(f"[DEBUG] HEAD request for image URL {image_url} returned status {head_response[0].status}. Skipping.")
+                return None
+        except Exception as e:
+            debug_log(f"[DEBUG] Error during HEAD check for image URL {image_url}: {e}. Skipping.")
+            return None
+        return image_url
+    debug_log(f"[DEBUG] No image tag found on page: {link}")
+    return None
+
 async def fetch_bunkr_gallery_images(username: str) -> list:
     image_urls = []
     async with aiohttp.ClientSession() as session:
         album_links = await get_all_album_links_from_search(username, session)
+        tasks = []  # Gather tasks for all image page links
         for album in album_links:
             img_page_links = await get_image_links_from_album(album, session)
             for link in img_page_links:
-                img_url = await get_image_url_from_linkk(link, session)
-                if img_url:
-                    image_urls.append(img_url)
+                tasks.append(get_image_url_from_linkk(link, session))
+        results = await asyncio.gather(*tasks)
+        # Filter out any None values.
+        image_urls = [url for url in results if url is not None]
     return image_urls
 
 async def fetch_all_album_pages(username, max_pages=10):
