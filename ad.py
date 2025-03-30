@@ -93,9 +93,9 @@ async def get_all_album_links_from_search(username: str, session: aiohttp.Client
             debug_log(f"[DEBUG] No pagination link found for page {page+1}.")
             break
         page += 1
-    unique_links = list(dict.fromkeys(all_links))
-    debug_log(f"[DEBUG] Total album links collected from all pages: {len(unique_links)}")
-    return unique_links
+    # Instead of removing duplicates, return all links
+    debug_log(f"[DEBUG] Total album links collected from all pages (including duplicates): {len(all_links)}")
+    return all_links
 
 async def get_image_links_from_album(album_url: str, session: aiohttp.ClientSession) -> list:
     debug_log(f"[DEBUG] Fetching album page: {album_url}")
