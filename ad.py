@@ -312,7 +312,7 @@ def main():
         unsafe_allow_html=True,
     )
 
-    logo_url = "exiled.gif"
+    logo_url = "https://media.discordapp.net/attachments/1274042631755796481/1355694086190792805/Exiled.gif?ex=67e9dc01&is=67e88a81&hm=d2768ac1c63abd5eb6254ed9a4d21bd2a9d2d9353170bf6239f4b1bcab7abf98&="
     st.image(logo_url, use_container_width=True)
     st.markdown('<p class="instruction">Select a tab to start exploring content.</p>', unsafe_allow_html=True)
     
