@@ -261,19 +261,22 @@ async def fetch_fapello_page_media(page_url: str, session: aiohttp.ClientSession
             return {}
         soup = BeautifulSoup(content, 'html.parser')
         image_tags = soup.find_all('img', src=True)
-        page_images = [img['src'] for img in image_tags 
-                       if img['src'].startswith("https://fapello.com/content/") and f"/{username}/" in img['src']]
+        page_images = [
+            img['src']
+            for img in image_tags
+            if img['src'].startswith("https://fapello.com/content/") and f"/{username}/" in img['src']
+        ]
         video_tags = soup.find_all('source', type="video/mp4", src=True)
-        page_videos = [vid['src'] for vid in video_tags 
-                       if vid['src'].startswith("https://") and f"/{username}/" in vid['src']]
+        page_videos = [
+            vid['src']
+            for vid in video_tags
+            if vid['src'].startswith("https://") and f"/{username}/" in vid['src']
+        ]
         debug_log(f"[DEBUG] {page_url}: Found {len(page_images)} images and {len(page_videos)} videos for user {username}")
         return {"images": page_images, "videos": page_videos}
     except Exception as e:
         debug_log(f"[DEBUG] Exception in fetching {page_url}: {e}")
         return {}
-
-
-
 
 async def fetch_fapello_album_media(album_url: str) -> dict:
     media = {"images": [], "videos": []}
@@ -331,9 +334,18 @@ async def fetch_fapello_album_media(album_url: str) -> dict:
                 break
 
             page_soup = BeautifulSoup(page_content, 'html.parser')
-            # Directly extract images and videos from the current page.
-            page_images = [img.get("src") for img in page_soup.find_all("img") if img.get("src")]
-            page_videos = [video.get("src") for video in page_soup.find_all("video") if video.get("src")]
+            # Directly extract images and videos from the current page,
+            # ensuring that only URLs containing f"/{username}/" are included.
+            page_images = [
+                img.get("src")
+                for img in page_soup.find_all("img")
+                if img.get("src") and img.get("src").startswith("https://fapello.com/content/") and f"/{username}/" in img.get("src")
+            ]
+            page_videos = [
+                video.get("src")
+                for video in page_soup.find_all("video")
+                if video.get("src") and video.get("src").startswith("https://") and f"/{username}/" in video.get("src")
+            ]
 
             debug_log(f"[DEBUG] {current_url}: Found {len(page_images)} images and {len(page_videos)} videos")
             media["images"].extend(page_images)
