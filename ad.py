@@ -260,15 +260,13 @@ async def fetch_fapello_page_media(page_url: str, session: aiohttp.ClientSession
             debug_log(f"[DEBUG] Failed to fetch {page_url} with status {status}")
             return {}
         soup = BeautifulSoup(content, 'html.parser')
-        # Get images from this page (keeping the username filter)
-        page_images = [img['src'] for img in soup.find_all('img', src=True)
+        image_tags = soup.find_all('img', src=True)
+        page_images = [img['src'] for img in image_tags 
                        if img['src'].startswith("https://fapello.com/content/") and f"/{username}/" in img['src']]
-        # Get videos from this page (no username filtering)
         video_tags = soup.find_all('source', type="video/mp4", src=True)
-        page_videos = [vid['src'] for vid in video_tags
-                       if vid['src'].startswith("https://cdn.fapello.com/content/") and 
-                          (vid['src'].endswith(".mp4") or vid['src'].endswith(".m4v"))]
-        debug_log(f"[DEBUG] {page_url}: Found {len(page_images)} images and {len(page_videos)} videos")
+        page_videos = [vid['src'] for vid in video_tags 
+                       if vid['src'].startswith("https://") and f"/{username}/" in vid['src']]
+        debug_log(f"[DEBUG] {page_url}: Found {len(page_images)} images and {len(page_videos)} videos for user {username}")
         return {"images": page_images, "videos": page_videos}
     except Exception as e:
         debug_log(f"[DEBUG] Exception in fetching {page_url}: {e}")
