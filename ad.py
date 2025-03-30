@@ -331,11 +331,14 @@ async def fetch_fapello_album_media(album_url: str) -> dict:
                 break
 
             page_soup = BeautifulSoup(page_content, 'html.parser')
-            # Assume extract_media_from_page returns a tuple: (list_of_images, list_of_videos)
-            page_images, page_videos = extract_media_from_page(page_soup)
+            # Directly extract images and videos from the current page.
+            page_images = [img.get("src") for img in page_soup.find_all("img") if img.get("src")]
+            page_videos = [video.get("src") for video in page_soup.find_all("video") if video.get("src")]
+
             debug_log(f"[DEBUG] {current_url}: Found {len(page_images)} images and {len(page_videos)} videos")
             media["images"].extend(page_images)
             media["videos"].extend(page_videos)
+            
             # Look for the next page marker (e.g., a div with id="next_page").
             next_div = page_soup.find("div", id="next_page")
             if next_div:
@@ -351,6 +354,7 @@ async def fetch_fapello_album_media(album_url: str) -> dict:
         media["videos"] = list(set(media["videos"]))
         debug_log(f"[DEBUG] Total media collected for {username}: {len(media['images'])} images and {len(media['videos'])} videos")
         return media
+
 
 async def extract_jpg5_album_media_urls(album_url: str) -> list:
     media_urls = set()
