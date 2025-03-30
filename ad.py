@@ -42,28 +42,6 @@ async def get_webpage_content(url, session):
     async with session.get(url, allow_redirects=True) as response:
         return await response.text(), str(response.url), response.status
 
-def sanitize_filename(url):
-    url_path = urllib.parse.urlparse(url).path
-    filename = os.path.basename(url_path)
-    return filename
-
-async def download_image(image_url, session):
-    try:
-        sanitized_filename = sanitize_filename(image_url)
-        image_path = os.path.join('downloaded_images', sanitized_filename)
-        async with session.get(image_url) as response:
-            if response.status == 200:
-                image_data = await response.read()
-                with open(image_path, 'wb') as f:
-                    f.write(image_data)
-                return image_path
-            else:
-                st.error(f"Failed to download image: {image_url}")
-                return None
-    except Exception as e:
-        st.error(f"Error downloading image: {image_url}, {e}")
-        return None
-
 def extract_album_links(page_content):
     soup = BeautifulSoup(page_content, 'html.parser')
     links = set()
@@ -101,15 +79,13 @@ async def fetch_image_urls(album_url, session):
         st.error(f"Error fetching images from {album_url}: {e}")
         return []
 
-async def fetch_and_download_images(album_urls):
+# New function: Fetch all Erome image URLs without downloading them
+async def fetch_all_erome_image_urls(album_urls):
     async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
         fetch_tasks = [fetch_image_urls(url, session) for url in album_urls]
         all_images = await asyncio.gather(*fetch_tasks, return_exceptions=True)
         all_image_urls = [img_url for images in all_images if isinstance(images, list) for img_url in images]
-        download_tasks = [download_image(img_url, session) for img_url in all_image_urls]
-        image_paths = await asyncio.gather(*download_tasks, return_exceptions=True)
-        valid_image_paths = [path for path in image_paths if path is not None]
-        return valid_image_paths
+        return all_image_urls
 
 def zip_images(image_paths, username):
     zip_buffer = io.BytesIO()
@@ -341,6 +317,7 @@ def main():
             except Exception as e:
                 st.error(f"An error occurred: {e}")
 
+    # Updated Tab 2: Erome Image Gallery (using image URLs directly)
     with tab2:
         st.markdown('<h3 class="subheading">Erome Image Gallery</h3>', unsafe_allow_html=True)
         username = st.text_input("Enter an Erome username to fetch images:", placeholder="e.g., username123", key="image_gallery")
@@ -349,20 +326,13 @@ def main():
             try:
                 album_links = asyncio.run(fetch_all_album_pages(username))
                 if album_links:
-                    image_paths = asyncio.run(fetch_and_download_images(album_links))
-                    if image_paths:
+                    image_urls = asyncio.run(fetch_all_erome_image_urls(album_links))
+                    if image_urls:
                         st.markdown("### 🖼️ Images Found:")
                         cols = st.columns(3)
-                        for i, image_path in enumerate(image_paths):
+                        for i, image_url in enumerate(image_urls):
                             with cols[i % 3]:
-                                st.image(image_path, use_container_width=True)
-                        zip_buffer = zip_images(image_paths, username)
-                        st.download_button(
-                            label=f"📥 Download All Images from {username}",
-                            data=zip_buffer,
-                            file_name=f"{username}_images.zip",
-                            mime="application/zip",
-                        )
+                                st.image(image_url, use_container_width=True)
                     else:
                         st.warning("No images found in the albums.")
                 else:
