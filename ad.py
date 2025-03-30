@@ -93,7 +93,6 @@ async def get_all_album_links_from_search(username: str, session: aiohttp.Client
             debug_log(f"[DEBUG] No pagination link found for page {page+1}.")
             break
         page += 1
-    # Instead of removing duplicates, return all links
     debug_log(f"[DEBUG] Total album links collected from all pages (including duplicates): {len(all_links)}")
     return all_links
 
@@ -139,7 +138,6 @@ async def get_image_url_from_linkk(link: str, session: aiohttp.ClientSession) ->
     if img_tag:
         image_url = img_tag.get('src')
         debug_log(f"[DEBUG] Found image URL: {image_url} for page link: {link}")
-        # Use asyncio.gather to perform the HEAD request concurrently if needed.
         try:
             head_task = session.head(image_url)
             head_response = await asyncio.gather(head_task)
@@ -154,18 +152,19 @@ async def get_image_url_from_linkk(link: str, session: aiohttp.ClientSession) ->
     return None
 
 async def fetch_bunkr_gallery_images(username: str) -> list:
-    image_urls = []
     async with aiohttp.ClientSession() as session:
         album_links = await get_all_album_links_from_search(username, session)
-        tasks = []  # Gather tasks for all image page links
+        tasks = []
         for album in album_links:
             img_page_links = await get_image_links_from_album(album, session)
             for link in img_page_links:
                 tasks.append(get_image_url_from_linkk(link, session))
         results = await asyncio.gather(*tasks)
-        # Filter out any None values.
+        # Filter out any None values
         image_urls = [url for url in results if url is not None]
-    return image_urls
+        # Remove duplicates and ignore URLs containing '/thumb/'
+        unique_urls = list({url for url in image_urls if "/thumb/" not in url})
+        return unique_urls
 
 async def fetch_all_album_pages(username, max_pages=10):
     async with aiohttp.ClientSession() as session:
