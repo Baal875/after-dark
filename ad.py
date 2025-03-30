@@ -266,7 +266,8 @@ async def fetch_fapello_page_media(page_url: str, session: aiohttp.ClientSession
         # Get videos from this page
         video_tags = soup.find_all('source', type="video/mp4", src=True)
         page_videos = [vid['src'] for vid in video_tags
-                       if vid['src'].startswith("https://") and f"/{username}/" in vid['src']]
+                       if vid['src'].startswith("https://cdn.fapello.com/content/") and 
+                          (vid['src'].endswith(".mp4") or vid['src'].endswith(".m4v"))]
         debug_log(f"[DEBUG] {page_url}: Found {len(page_images)} images and {len(page_videos)} videos for user {username}")
         return {"images": page_images, "videos": page_videos}
     except Exception as e:
@@ -300,7 +301,8 @@ async def fetch_fapello_album_media(album_url: str) -> dict:
                            if img['src'].startswith("https://fapello.com/content/") and f"/{username}/" in img['src']]
             video_tags = soup.find_all('source', type="video/mp4", src=True)
             page_videos = [vid['src'] for vid in video_tags
-                           if vid['src'].startswith("https://") and f"/{username}/" in vid['src']]
+                           if vid['src'].startswith("https://cdn.fapello.com/content/") and 
+                              (vid['src'].endswith(".mp4") or vid['src'].endswith(".m4v"))]
             media["images"].extend(page_images)
             media["videos"].extend(page_videos)
             debug_log(f"[DEBUG] {current_url}: Found {len(page_images)} images and {len(page_videos)} videos")
