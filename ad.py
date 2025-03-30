@@ -521,6 +521,7 @@ def main():
             except Exception as e:
                 st.error(f"An error occurred: {e}")
 
+
     with tab6:
         st.markdown('<h3 class="subheading">JPG5 Image Gallery</h3>', unsafe_allow_html=True)
         jpg5_album_url = st.text_input("Enter a JPG5 album URL:", placeholder="e.g., https://jpg5.su/album/...", key="jpg5_album")
